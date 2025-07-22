@@ -1,0 +1,14 @@
+# 排除上传目录中的大文件
+public/uploads/*.mp4
+public/uploads/*.avi
+public/uploads/*.mov
+public/uploads/*.jpg
+public/uploads/*.jpeg
+public/uploads/*.png
+public/uploads/*.pic
+public/uploads/*-frames/
+
+# 排除其他大文件或不必要的目录
+node_modules/
+.git/
+*.log

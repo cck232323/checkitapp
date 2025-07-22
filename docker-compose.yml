@@ -1,0 +1,38 @@
+# version: '3'
+
+# services:
+#   frontend:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile.frontend
+#     ports:
+#       - "3000:3000"
+#     environment:
+#       - NEXT_PUBLIC_BACKEND_URL=http://backend:5000
+#       - OPENAI_API_KEY=${OPENAI_API_KEY}
+#       - NEXT_FONT_GOOGLE_SKIP_DOWNLOAD=1
+#       - NEXT_TELEMETRY_DISABLED=1
+#       - NODE_ENV=production
+#       - DATABASE_URL=${DATABASE_URL:-file:./dev.db}
+#     volumes:
+#       - ./public:/app/public  # 确保前端可以访问后端生成的文件
+#     depends_on:
+#       - backend
+#     restart: unless-stopped
+
+#   backend:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile.backend
+#     ports:
+#       - "5000:5000"
+#     environment:
+#       - VIDEO_ANALYZER_PATH=./analyzer-backend/video_analyzer.py
+#       - OPENAI_API_KEY=${OPENAI_API_KEY}
+#     volumes:
+#       - ./public:/app/public  # 确保后端生成的文件可以被前端访问
+#     restart: unless-stopped
+
+# volumes:
+#   uploads:
+#     driver: local

@@ -1,0 +1,11 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "sh -c 'cd /app/analyzer-backend && python server.py & node .next/standalone/server.js'"
+restartPolicyType = "ON_FAILURE"
+
+[variables]
+VIDEO_ANALYZER_PATH = "./analyzer-backend/video_analyzer.py"
+OPENAI_API_KEY = "${OPENAI_API_KEY}"

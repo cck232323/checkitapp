@@ -1,0 +1,63 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// user model
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  analyses  Analysis[]
+}
+
+// Analysis result model
+model Analysis {
+  id               String   @id @default(cuid())
+  type             String   // 'image', 'video', or 'audio'
+  content          String?
+
+  // File paths
+  imagePath        String?
+  videoPath        String?
+
+  // File metadata
+  originalFileName String?   // Original uploaded filename
+  fileSize         Int?      // File size in bytes
+  mimeType         String?   // MIME type of the uploaded file
+  uploadedAt       DateTime  @default(now()) // Time of upload
+
+  // Analysis results
+  analysis         String?
+  audioTranscript  String?
+  audioAnalysis    String?
+  overallAnalysis  String?
+  status          String   @default("pending") // "pending", "processing", "completed", "failed"
+  createdAt        DateTime @default(now())
+
+  // User association
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id])
+  frames           Frame[]
+}
+
+// video frames model
+model Frame {
+  id           String   @id @default(cuid())
+  framePath    String
+  frameLabel   String?
+  frameAnalysis String?  // 存储帧分析内容
+  analysisId   String
+  analysis     Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+}

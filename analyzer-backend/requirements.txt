@@ -1,0 +1,29 @@
+# 视频处理核心依赖
+numpy>=1.20.0
+opencv-python>=4.5.0
+pillow>=8.0.0
+
+# 音频处理
+openai-whisper
+
+# 机器学习和AI
+scikit-learn
+torch
+tiktoken
+
+# Web服务
+Flask>=2.0.0
+Werkzeug>=2.0.0
+flask-cors
+
+# 实用工具
+tqdm
+click
+PyYAML
+requests
+matplotlib
+pandas
+
+# 开发工具
+ipython
+jupyter
