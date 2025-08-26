@@ -27,7 +27,9 @@ try:
     print(f"Upload directory {upload_dir} is now writable")
 except Exception as e:
     print(f"WARNING: Could not set permissions on {upload_dir}: {str(e)}")
-
+@app.route('/health', methods=['GET'])
+def health_check():
+    return 'OK', 200
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
     print(f"Python backend version: {sys.version}")

@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const result = await getAnalysisResult(id);
-    console.log('Retrieved analysis result:', JSON.stringify(result, null, 2));
+    console.log('Retrieved analysis result:', JSON.stringify(result));
     return res.status(200).json(result);
   } catch (error: any) {
     console.error('Error retrieving analysis result:', error);

@@ -52,3 +52,17 @@ __pycache__/
 *$py.class
 venv/
 ENV/
+# Add these if not already present:
+.analyzer-backend/__pycache__/
+analyzer-backend/venv/
+**/.ipynb_checkpoints
+*.ipynb
+*.h5
+*.pt
+*.onnx
+__tests__/
+jupyter*
+*.log
+*.bak
+*.tmp
+.next/cache

@@ -12,9 +12,12 @@ import { saveAnalysisResult } from 'server/services/dbService';
 // const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://backend:5000';
 const BACKEND_API_URL =
   process.env.BACKEND_API_URL ||
+  // (process.env.NODE_ENV === 'production'
+  //   ? 'http://localhost:5000'    // Railway 单容器部署场景
+  //   : 'http://backend:5000');    // 本地 Docker Compose 场景
   (process.env.NODE_ENV === 'production'
-    ? 'http://localhost:5000'    // Railway 单容器部署场景
-    : 'http://backend:5000');    // 本地 Docker Compose 场景
+  ? 'http://backend:5000'
+  : 'http://localhost:5000');
 // 类型定义
 type AnalysisResult = {
   type: string;
@@ -46,22 +49,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('Method not allowed, returning 405');
     return res.status(405).json({ message: 'Method not allowed' });
   }
-
-  // 确保上传目录存在
-  try {
-    ensureUploadDir();
-  } catch (err: any) {
-    console.error('Error ensuring upload directory:', err);
-    return res.status(500).json({ message: err.message });
-  }
-
+  
+  // 设置为普通 JSON 响应，不使用分块传输
+  res.setHeader('Content-Type', 'application/json');
+  
+  // 移除这些可能导致问题的头
+  // res.setHeader('Transfer-Encoding', 'chunked');
+  // res.setHeader('Cache-Control', 'no-cache');
+  
+  // 移除保活机制，不再需要
+  // const keepAlive = setInterval(() => {
+  //   res.write(' ');
+  // }, 30000);
+  
   try {
     console.log('Starting to process upload request');
     
-    // 解析表单数据 - 使用明确的类型
-    const { fields, files }: FormidableResult = await parseForm(req);
+    // 确保上传目录存在
+    try {
+      ensureUploadDir();
+    } catch (err: any) {
+      console.error('Error ensuring upload directory:', err);
+      return res.status(500).json({ message: err.message });
+    }
     
+    // 解析表单数据
+    const { fields, files }: FormidableResult = await parseForm(req);
     console.log('Form data parsed successfully');
+    
     const type = fields.type?.[0] || '';
     console.log(`Content type: ${type}`);
     
@@ -86,7 +101,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       console.log(`Text content length: ${content.length}`);
       const analysis = await analyzeWithGPT(content, 'text');
-      
       analysisResults = {
         type: 'text',
         content,
@@ -150,7 +164,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const filePath = file.filepath;
       console.log(`Video file path: ${filePath}`);
       console.log(`Video file details: name=${file.originalFilename}, size=${file.size}, type=${file.mimetype}`);
-      
+
       try {
         // 检查文件是否存在
         if (!fs.existsSync(filePath)) {
@@ -230,23 +244,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // 并行执行所有分析任务
         const frameAnalyses = await Promise.all(frameAnalysisTasks);
         console.log(`All ${frames.length} frames analyzed in parallel`);
-        
         // 综合所有分析结果
         console.log('Generating overall analysis from frame analyses and audio analysis...');
         
-        // 使用生成的函数创建综合分析
-        const overallAnalysis = await generateOverallAnalysis(audioAnalysis, frameAnalyses);
-        
-        // 创建包含所有分析结果的对象
-        analysisResults = {
-          type: 'video',
-          videoPath: `/uploads/${path.basename(filePath)}`,
-          audioTranscript,
-          audioAnalysis,
-          frames,
-          frameAnalyses,
-          overallAnalysis
-        };
+        // Make sure this function is being called and its result is being used
+        try {
+          const overallAnalysis = await generateOverallAnalysis(audioAnalysis, frameAnalyses);
+          console.log('Overall analysis generated successfully:', overallAnalysis.substring(0, 100) + '...');
+          // Ensure the overall analysis is included in the results object
+          analysisResults = {
+            type: 'video',
+            videoPath: `/uploads/${path.basename(filePath)}`,
+            audioTranscript,
+            audioAnalysis,
+            frames,
+            frameAnalyses,
+            overallAnalysis: overallAnalysis, // Make sure this is set correctly
+            analysis: audioAnalysis // Set analysis as a fallback
+          };
+        } catch (analysisError) {
+          console.error('Error generating overall analysis:', analysisError);
+          
+          // Provide a fallback if overall analysis generation fails
+          analysisResults = {
+            type: 'video',
+            videoPath: `/uploads/${path.basename(filePath)}`,
+            audioTranscript,
+            audioAnalysis,
+            frames,
+            frameAnalyses,
+            overallAnalysis: "Error generating overall analysis. Please see individual frame analyses and audio analysis.",
+            analysis: audioAnalysis // Use audio analysis as a fallback
+          };
+        }
         
         console.log('Video analysis completed successfully');
       } catch (videoError: unknown) {
@@ -262,6 +292,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error: unknown) {
     const err = error as Error;
     console.error('Error processing upload:', err);
-    return res.status(500).json({ message: err.message || 'An error occurred during processing' });
+    return res.status(500).json({ 
+      message: err.message || 'An error occurred during processing',
+    });
   }
 }

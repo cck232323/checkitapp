@@ -37,9 +37,15 @@ interface TextAnalysisResponse {
 
 type AnalysisResponse = VideoAnalysisResponse | ImageAnalysisResponse | TextAnalysisResponse;
 
-type UploadFormProps = {
+interface UploadFormProps {
   onAnalysisStart?: () => void;
   onAnalysisComplete?: (data: any) => void;
+}
+
+// 在组件顶部添加检测函数
+const isSafari = () => {
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.indexOf('safari') !== -1 && ua.indexOf('chrome') === -1;
 };
 
 const UploadForm: React.FC<UploadFormProps> = ({ 
@@ -51,6 +57,8 @@ const UploadForm: React.FC<UploadFormProps> = ({
   const [textContent, setTextContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [progressStatus, setProgressStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   
@@ -114,19 +122,19 @@ const UploadForm: React.FC<UploadFormProps> = ({
     setFile(selectedFile);
   };
 
-  // 修复提交函数
+  // 修改 handleSubmit 函数，使用 axios 而不是 fetch，并禁用流式处理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     setError('');
     
     if (uploadType === 'text' && !textContent.trim()) {
-      setError('Please enter some text');
+      setError('Please enter some text to analyze');
       return;
     }
     
     if ((uploadType === 'image' || uploadType === 'video') && !file) {
-      setError(`Please select a ${uploadType} file`);
+      setError(`Please select a ${uploadType} file to analyze`);
       return;
     }
     
@@ -143,74 +151,77 @@ const UploadForm: React.FC<UploadFormProps> = ({
         formData.append('file', file as File);
       }
       
+      // 使用 axios 代替 fetch，更好地处理跨浏览器兼容性
       const response = await axios.post('/api/analyze', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        // 增加超时时间，视频处理可能需要更长时间
+        timeout: 300000, // 5分钟
       });
-
-      console.log("API response received:", response.data);
       
-      setIsLoading(false);
-
-      if (response.data) {
-        // 处理视频分析结果，确保数据结构正确
-        const processedData = { ...response.data } as AnalysisResponse;
-        
-        // 如果是视频分析结果，确保帧分析数据结构正确
-        if (processedData.type === 'video' && Array.isArray(processedData.frameAnalyses)) {
-          const videoData = processedData as VideoAnalysisResponse;
-          
-          // 确保每个帧分析都有正确的结构
-          videoData.frameAnalyses = videoData.frameAnalyses.map((analysis: FrameAnalysisResponse, index: number) => ({
-            framePath: videoData.frames[index],
-            analysis: analysis.analysis
-          }));
-        }
-        
-        onAnalysisComplete?.(processedData);
-        
-        // 使用 sessionStorage 而不是 localStorage，避免数据过大
-        try {
-          sessionStorage.setItem('analysisResult', JSON.stringify(processedData));
-        } catch (storageErr) {
-          console.error("Error storing result:", storageErr);
-        }
-        
-        router.push({
-          pathname: '/result',
-          query: { id: new Date().getTime().toString() } // 添加一个唯一ID，确保页面刷新
-        });
-      }
+      // 处理响应
+      const result = response.data;
+      console.log('Analysis result:', result);
+      
+      // 保存结果并跳转
+      sessionStorage.setItem('analysisResult', JSON.stringify(result));
+      window.location.href = `/result?id=${Date.now()}`;
     } catch (err: any) {
+      console.error('Error during analysis:', err);
+      
+      // 提供更详细的错误信息
+      let errorMessage = 'An error occurred during analysis';
+      
+      if (axios.isAxiosError(err)) {
+        if (err.response) {
+          // 服务器返回了错误状态码
+          errorMessage = `Server error: ${err.response.status}`;
+          console.error('Response data:', err.response.data);
+        } else if (err.request) {
+          // 请求已发送但没有收到响应
+          errorMessage = 'No response received from server';
+        } else {
+          // 设置请求时发生了错误
+          errorMessage = err.message;
+        }
+      } else {
+        errorMessage = err.message || errorMessage;
+      }
+      
+      setError(errorMessage);
       setIsLoading(false);
-      setError(err.response?.data?.message || 'An error occurred during analysis');
-      console.error('Analysis error:', err);
     }
   };
 
   // 修改渲染部分，使用原生HTML元素而不是隐藏的input
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="flex justify-center mb-4">
+      <div className="flex rounded-lg overflow-hidden mb-4">
         <button
           type="button"
           onClick={() => handleTypeChange('text')}
-          className={`px-4 py-2 ${uploadType === 'text' ? 'bg-blue-500 text-black' : 'bg-gray-200'}`}
+          className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+            uploadType === 'text' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-white hover:bg-gray-700'
+          }`}
         >
           Text
         </button>
         <button
           type="button"
           onClick={() => handleTypeChange('image')}
-          className={`px-4 py-2 ${uploadType === 'image' ? 'bg-blue-500 text-black' : 'bg-gray-200'}`}
+          className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+            uploadType === 'image' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
         >
           Image
         </button>
         <button
           type="button"
           onClick={() => handleTypeChange('video')}
-          className={`px-4 py-2 ${uploadType === 'video' ? 'bg-blue-500 text-black' : 'bg-gray-200'}`}
+          className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+            uploadType === 'video' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
         >
           Video
         </button>
@@ -218,39 +229,67 @@ const UploadForm: React.FC<UploadFormProps> = ({
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {uploadType === 'text' ? (
-          <textarea
-            value={textContent}
-            onChange={(e) => setTextContent(e.target.value)}
-            placeholder="Enter text for analysis..."
-            className="w-full h-40 p-2 border border-gray-300 rounded"
-            disabled={isLoading}
-          />
+          <div className="relative">
+            <textarea
+              value={textContent}
+              onChange={(e) => setTextContent(e.target.value)}
+              placeholder="Enter text for analysis..."
+              //className="w-full h-40 p-4 rounded-lg bg-gray-900/80 border border-gray-700/50 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              className="w-full h-40 p-4 rounded-lg bg-blue-200 text-black placeholder-gray-500 border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              disabled={isLoading}
+            />
+            {textContent && (
+              <div className="absolute top-2 left-4 text-xs text-blue-400 bg-gray-900/90 px-1 animate-pulse">
+                Analyzing text...
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="border-2 border-dashed border-gray-300 rounded p-4 text-center">
-            {/* 直接显示文件输入框，不再隐藏 */}
+          <div className="space-y-2">
+            <label 
+              htmlFor="file-upload" 
+              className="block w-full p-4 text-center border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
+            >
+              {file ? file.name : `Click to upload ${uploadType}`}
+            </label>
             <input
+              id="file-upload"
               type="file"
-              onChange={handleFileChange}
               accept={uploadType === 'image' ? 'image/*' : 'video/*'}
-              className="w-full p-2"
+              onChange={handleFileChange}
+              className="hidden"
               disabled={isLoading}
             />
             {file && (
-              <div className="mt-2">
-                Selected: {file.name} ({Math.round(file.size / 1024)} KB)
-              </div>
+              <p className="text-sm text-gray-400 text-center">
+                {uploadType === 'image' ? 'Image' : 'Video'} selected: {file.name}
+              </p>
             )}
           </div>
         )}
 
-        {error && <div className="text-red-500">{error}</div>}
+        {error && (
+          <div className="p-3 bg-red-900/30 border border-red-800/50 rounded-lg text-red-200 text-sm">
+            {error}
+          </div>
+        )}
 
         <button
           type="submit"
-          className="w-full bg-blue-500 text-white py-2 rounded"
           disabled={isLoading}
+          className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-lg hover:shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Analyzing...' : 'Analyze'}
+          {isLoading ? (
+            <span className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {progress > 0 ? `${progress}%` : 'Processing...'}
+            </span>
+          ) : (
+            'Analyze'
+          )}
         </button>
       </form>
     </div>

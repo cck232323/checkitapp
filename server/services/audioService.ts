@@ -4,7 +4,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import FormData from 'form-data';
 import axios from 'axios';
-import { uploadDir } from './fileService';
+// import { uploadDir } from './fileService';
 
 const execPromise = promisify(exec);
 
@@ -64,6 +64,7 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
           ...formData.getHeaders(),
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         },
+        timeout: 600000
       }
     );
     

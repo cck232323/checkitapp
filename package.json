@@ -15,6 +15,7 @@
     "cross-env": "^7.0.3",
     "form-data": "^4.0.3",
     "formidable": "^3.5.4",
+    "framer-motion": "^12.23.9",
     "next": "15.3.5",
     "openai": "^5.8.2",
     "prisma": "^6.11.1",
