@@ -1,11 +1,14 @@
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @next/next/no-img-element */
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import axios from 'axios';
 import { Geist, Geist_Mono } from "next/font/google";
+import api from '../lib/api';
+import { ResultReport } from '@/components/ResultReport';
+import { AnalysisReport } from '@/types/Report';
 
 const geistSans = Geist({
   subsets: ['latin'],
@@ -33,8 +36,9 @@ interface AnalysisResult {
   frames?: string[];
   frameAnalyses?: FrameAnalysis[] | Array<{analysis: string}>;
   overallAnalysis?: string;
-  confidenceValue?: number; // Assuming confidenceValue is added to the interface
+  confidenceValue?: number;
 }
+
 // 在文件顶部（ResultPage 组件上方）新增一个通用可折叠组件
 const CollapsibleSection: React.FC<{
   title: string;
@@ -122,6 +126,7 @@ const ResultPage: React.FC = () => {
   const [confidenceValue, setConfidenceValue] = useState<number>(0);
   const [isPremiumUnlocked, setIsPremiumUnlocked] = useState<boolean>(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
+  const [report, setReport] = useState<AnalysisReport | null>(null);
   
   useEffect(() => {
     // Add fade-in effect on page load
@@ -228,47 +233,16 @@ const ResultPage: React.FC = () => {
     // If sessionStorage has no data, try to get from API
     if (!id) return;
 
+    // 修改fetchResult函数，使用新的API
     async function fetchResult() {
       try {
-        const response = await axios.get(`/api/result?id=${id}`);
-        console.log("Results retrieved from API:", response.data);
-        setResult(response.data);
+        const response = await api.getResult(id as string);
+        console.log("Results retrieved from API:", response);
+        setResult(response);
         
-        // 添加置信区间值的解析
-        if (response.data) {
-          // 从 overallAnalysis 文本中提取置信区间
-          let confidence = 50; // 默认值
-          
-          if (response.data.overallAnalysis) {
-            // 使用正则表达式匹配 "Confidence Interval: XX–YY%" 格式
-            const confidenceMatch = response.data.overallAnalysis.match(/\*\*Confidence Interval\*\*:\s*(\d+)[\–\-](\d+)%?/);
-            
-            if (confidenceMatch && confidenceMatch.length >= 3) {
-              // 提取区间的两个数值并计算平均值
-              const lowerBound = parseInt(confidenceMatch[1], 10);
-              const upperBound = parseInt(confidenceMatch[2], 10);
-              confidence = Math.round((lowerBound + upperBound) / 2);
-              console.log(`Extracted confidence interval: ${lowerBound}-${upperBound}, average: ${confidence}`);
-            } else {
-              // 如果没有找到匹配，尝试其他可能的格式
-              // const altMatch = response.data.overallAnalysis.match(/confidence\s*(?:interval|level|rating|score)?:?\s*(\d+)[\–\-](\d+)%?/i);
-              const altMatch = response.data.overallAnalysis.match(/confidence\s*(?:interval|level|rating|score)?:?\s*(\d+)\s*[-\u2013]\s*(\d+)\s*[%％]?/i);
-              console.log("Alternative match:", altMatch);
-              if (altMatch && altMatch.length >= 3) {
-                const lowerBound = parseInt(altMatch[1], 10);
-                const upperBound = parseInt(altMatch[2], 10);
-                confidence = Math.round((lowerBound + upperBound) / 2);
-                console.log(`Extracted alternative confidence format: ${lowerBound}-${upperBound}, average: ${confidence}`);
-              } else {
-                // 如果仍然没有找到，使用随机值作为示例
-                confidence = Math.floor(Math.random() * 100);
-                console.log(`No confidence interval found, using random value: ${confidence}`);
-              }
-            }
-          }
-          
-          setConfidenceValue(confidence);
-        }
+        // 使用API提取置信度分数
+        const confidence = api.extractConfidenceScore(response);
+        setConfidenceValue(confidence);
       } catch (err: any) {
         console.error('Error fetching result:', err);
         setError(err.message || 'Failed to load analysis result');
@@ -369,6 +343,55 @@ const ResultPage: React.FC = () => {
       setIsProcessingPayment(false);
     }
   };
+
+  // 构建报告数据结构
+  const buildReportData = (): AnalysisReport => {
+    return {
+      id: id as string,
+      fileName: "Sample Analysis",
+      fileType: result.type,
+      createdAt: new Date().toISOString(),
+      overallRisk: confidenceValue >= 65 ? 'low' : 'high',
+      confidenceScore: confidenceValue,
+      summary: result.overallAnalysis || result.analysis || 'No summary available',
+      indicators: [
+        {
+          description: "Potential deception indicators detected",
+          severity: confidenceValue >= 65 ? 'low' : 'high',
+          type: "behavioral",
+          confidence: confidenceValue,
+          evidence: ["Analysis suggests potential deception patterns"]
+        }
+      ],
+      metadata: {
+        processingTime: 1200,
+        fileSize: 1024000,
+        framesAnalyzed: result.frames?.length || 0
+      }
+    };
+  };
+
+  // 如果有报告数据，使用 ResultReport 组件
+  if (report) {
+    return (
+      <div className={`${geistSans.className} ${geistMono.className} min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-6 sm:p-8 transition-opacity duration-700 ease-in-out ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
+        <Head>
+          <title>Analysis Results - LiedIn</title>
+          <meta name="description" content="Deception analysis results" />
+        </Head>
+        
+        <div className="max-w-6xl mx-auto">
+          <ResultReport 
+            report={report} 
+            onNewAnalysis={() => {
+              // 处理新分析的逻辑
+              router.push('/');
+            }} 
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`${geistSans.className} ${geistMono.className} min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-6 sm:p-8 transition-opacity duration-700 ease-in-out ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>

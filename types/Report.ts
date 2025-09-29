@@ -14,3 +14,24 @@ export interface Report {
   }[];
   overallAnalysis?: string;
 }
+export interface AnalysisReport {
+  id: string;
+  fileName?: string;
+  fileType: string;
+  createdAt: string;
+  overallRisk: string;
+  confidenceScore: number;
+  summary: string;
+  indicators: {
+    type: string;
+    description: string;
+    severity: string;
+    confidence: number;
+    evidence: string[];
+  }[];
+  metadata: {
+    processingTime: number;
+    fileSize?: number;
+    framesAnalyzed?: number;
+  };
+}

@@ -51,6 +51,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        // Proxy Next.js client requests under /api/analyze-backend/* to Python analyzer
+        source: '/api/analyze-backend/:path*',
+        destination: `${process.env.BACKEND_API_URL}/:path*`,
+      },
+      {
         source: '/uploads/:path*',
         destination: '/public/uploads/:path*',
       },

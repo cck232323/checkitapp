@@ -1,7 +1,12 @@
+// export default UploadForm;
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import axios from 'axios';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 // 添加视频帧的类型定义
 interface VideoFrame {
@@ -196,42 +201,40 @@ const UploadForm: React.FC<UploadFormProps> = ({
 
   // 修改渲染部分，使用原生HTML元素而不是隐藏的input
   return (
-    <div className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle>Upload for Analysis</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
       <div className="flex rounded-lg overflow-hidden mb-4">
-        <button
-          type="button"
+        <Button
+          variant={uploadType === 'text' ? 'default' : 'ghost'}
           onClick={() => handleTypeChange('text')}
-          className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
-            uploadType === 'text' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-white hover:bg-gray-700'
-          }`}
+          className="flex-1 py-3 px-4 text-center font-medium transition-colors"
         >
           Text
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant={uploadType === 'image' ? 'default' : 'ghost'}
           onClick={() => handleTypeChange('image')}
-          className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
-            uploadType === 'image' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-          }`}
+          className="flex-1 py-3 px-4 text-center font-medium transition-colors"
         >
           Image
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant={uploadType === 'video' ? 'default' : 'ghost'}
           onClick={() => handleTypeChange('video')}
-          className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
-            uploadType === 'video' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-          }`}
+          className="flex-1 py-3 px-4 text-center font-medium transition-colors"
         >
           Video
-        </button>
+        </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {uploadType === 'text' ? (
           <div className="relative">
-            <textarea
-              value={textContent}
+            <Textarea
+                           value={textContent}
               onChange={(e) => setTextContent(e.target.value)}
               placeholder="Enter text for analysis..."
               //className="w-full h-40 p-4 rounded-lg bg-gray-900/80 border border-gray-700/50 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
@@ -252,9 +255,9 @@ const UploadForm: React.FC<UploadFormProps> = ({
             >
               {file ? file.name : `Click to upload ${uploadType}`}
             </label>
-            <input
-              id="file-upload"
-              type="file"
+            <Input
+                           id="file-upload"
+                           type="file"
               accept={uploadType === 'image' ? 'image/*' : 'video/*'}
               onChange={handleFileChange}
               className="hidden"
@@ -274,8 +277,9 @@ const UploadForm: React.FC<UploadFormProps> = ({
           </div>
         )}
 
-        <button
-          type="submit"
+        <Button
+                   type="submit"
+                   variant="default"
           disabled={isLoading}
           className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-lg hover:shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
         >
@@ -290,9 +294,10 @@ const UploadForm: React.FC<UploadFormProps> = ({
           ) : (
             'Analyze'
           )}
-        </button>
+        </Button>
       </form>
-    </div>
+    </CardContent>
+  </Card>
   );
 };
 
