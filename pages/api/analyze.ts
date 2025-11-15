@@ -1,39 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import path from 'path';
 import fs from 'fs';
-import axios from 'axios';
 import { parseForm, imageToBase64, ensureUploadDir, FormidableResult } from 'server/services/fileService';
 import { analyzeWithGPT, generateOverallAnalysis } from 'server/services/aiService';
 import { extractAudioFromVideo, transcribeAudio } from 'server/services/audioService';
 import { extractFramesFromVideo } from 'server/services/videoService';
-import { saveAnalysisResult } from 'server/services/dbService';
+import { saveAnalysisResult, updateAnalysisResult } from 'server/services/dbService';
+import { deriveConfidenceScore } from '@/lib/confidence';
+import { Report } from '@/types/Report';
 
-// 获取后端 API URL
-// const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://backend:5000';
-const BACKEND_API_URL =
-  process.env.BACKEND_API_URL ||
-  // (process.env.NODE_ENV === 'production'
-  //   ? 'http://localhost:5000'    // Railway 单容器部署场景
-  //   : 'http://backend:5000');    // 本地 Docker Compose 场景
-  (process.env.NODE_ENV === 'production'
-  ? 'http://backend:5000'
-  : 'http://localhost:5000');
-// 类型定义
-type AnalysisResult = {
-  type: string;
-  content?: string;
-  analysis?: string;
-  imagePath?: string;
-  videoPath?: string;
-  audioTranscript?: string;
-  audioAnalysis?: string;
-  frames?: string[];
-  frameAnalyses?: Array<{
-    framePath: string;
-    analysis: string;
-  }>;
-  overallAnalysis?: string;
-};
+type AnalysisResult = Report;
 
 // 禁用默认的 body 解析
 export const config = {
@@ -101,10 +77,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       console.log(`Text content length: ${content.length}`);
       const analysis = await analyzeWithGPT(content, 'text');
+      const { score: confidenceScore } = deriveConfidenceScore(analysis);
       analysisResults = {
         type: 'text',
         content,
         analysis,
+        confidenceValue: confidenceScore,
+        status: 'completed',
       };
     } 
     else if (type === 'image') {
@@ -139,11 +118,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // 使用真实的OpenAI分析
         const base64Image = imageToBase64(filePath);
         const analysis = await analyzeWithGPT(base64Image, 'image');
+        const { score: confidenceScore } = deriveConfidenceScore(analysis);
         
         analysisResults = {
           type: 'image',
           imagePath: `/uploads/${path.basename(filePath)}`,
           analysis,
+          confidenceValue: confidenceScore,
+          status: 'completed',
         };
       } catch (imgError: unknown) {
         const err = imgError as Error;
@@ -162,26 +144,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       
       const filePath = file.filepath;
+      const relativeVideoPath = `/uploads/${path.basename(filePath)}`;
       console.log(`Video file path: ${filePath}`);
       console.log(`Video file details: name=${file.originalFilename}, size=${file.size}, type=${file.mimetype}`);
 
       try {
-        // 检查文件是否存在
         if (!fs.existsSync(filePath)) {
           console.error(`Video file does not exist at path: ${filePath}`);
           return res.status(500).json({ message: 'Video file not found after upload' });
         }
         
-        // 检查文件大小
         const stats = fs.statSync(filePath);
         console.log(`File size: ${stats.size} bytes`);
 
-        // 提取音频并转换为文本
         console.log('Extracting and transcribing audio from video...');
         const audioPath = await extractAudioFromVideo(filePath);
         const audioTranscript = await transcribeAudio(audioPath);
         
-        // 输出音频转录结果
         if (audioTranscript && audioTranscript.length > 0) {
           console.log(`Audio transcript received, length: ${audioTranscript.length}`);
           console.log(`Audio transcript (first 500 chars): ${audioTranscript.substring(0, 500)}...`);
@@ -189,96 +168,107 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           console.log('No audio transcript received');
         }
         
-        // 分析音频转录文本
         console.log('Analyzing audio transcript...');
         let audioAnalysis = '';
         if (audioTranscript && audioTranscript.length > 0) {
           audioAnalysis = await analyzeWithGPT(audioTranscript, 'text');
-          console.log('Audio analysis completed');
-          console.log(`Audio analysis (first 500 chars): ${audioAnalysis.substring(0, 500)}...`);
         } else {
-          console.log('No audio transcript available for analysis');
           audioAnalysis = "No audio transcript available for analysis.";
         }
 
-        // 提取视频帧
-        console.log('Extracting frames from video...');
-        const frames = await extractFramesFromVideo(filePath);
-        console.log(`Extracted ${frames.length} frames from video`);
-
-        // Analyzing all video frames in parallel...
-
-        // 创建分析任务数组
-        const frameAnalysisTasks = frames.map(async (framePath, index) => {
-          console.log(`Starting analysis for frame ${index + 1}/${frames.length}: ${framePath}`);
-          
-          // 获取帧的完整文件路径
-          const fullFramePath = path.join(process.cwd(), 'public', framePath);
-          
-          try {
-            // 将图片转换为base64
-            const base64Frame = imageToBase64(fullFramePath);
-            
-            // 使用GPT分析帧
-            const frameAnalysis = await analyzeWithGPT(base64Frame, 'video-frame');
-            
-            console.log(`Frame ${index + 1} analysis completed`);
-            
-            // 返回分析结果
-            return {
-              framePath: framePath,
-              analysis: frameAnalysis
-            };
-          } catch (frameError: unknown) {
-            const err = frameError as Error;
-            console.error(`Error analyzing frame ${index + 1}: ${err.message}`);
-            
-            // 返回错误信息
-            return {
-              framePath: framePath,
-              analysis: `Error analyzing this frame: ${err.message}`
-            };
-          }
-        });
-
-        // 并行执行所有分析任务
-        const frameAnalyses = await Promise.all(frameAnalysisTasks);
-        console.log(`All ${frames.length} frames analyzed in parallel`);
-        // 综合所有分析结果
-        console.log('Generating overall analysis from frame analyses and audio analysis...');
-        
-        // Make sure this function is being called and its result is being used
+        let preliminaryOverall = audioAnalysis;
         try {
-          const overallAnalysis = await generateOverallAnalysis(audioAnalysis, frameAnalyses);
-          console.log('Overall analysis generated successfully:', overallAnalysis.substring(0, 100) + '...');
-          // Ensure the overall analysis is included in the results object
-          analysisResults = {
-            type: 'video',
-            videoPath: `/uploads/${path.basename(filePath)}`,
-            audioTranscript,
-            audioAnalysis,
-            frames,
-            frameAnalyses,
-            overallAnalysis: overallAnalysis, // Make sure this is set correctly
-            analysis: audioAnalysis // Set analysis as a fallback
-          };
-        } catch (analysisError) {
-          console.error('Error generating overall analysis:', analysisError);
-          
-          // Provide a fallback if overall analysis generation fails
-          analysisResults = {
-            type: 'video',
-            videoPath: `/uploads/${path.basename(filePath)}`,
-            audioTranscript,
-            audioAnalysis,
-            frames,
-            frameAnalyses,
-            overallAnalysis: "Error generating overall analysis. Please see individual frame analyses and audio analysis.",
-            analysis: audioAnalysis // Use audio analysis as a fallback
-          };
+          preliminaryOverall = await generateOverallAnalysis(audioAnalysis, []);
+        } catch (preliminaryError) {
+          const err = preliminaryError as Error;
+          console.error('Error generating preliminary overall analysis:', err);
         }
-        
-        console.log('Video analysis completed successfully');
+        const { score: initialConfidence } = deriveConfidenceScore(preliminaryOverall || audioAnalysis);
+
+        const baseResult: AnalysisResult = {
+          type: 'video',
+          videoPath: relativeVideoPath,
+          audioTranscript,
+          audioAnalysis,
+          overallAnalysis: preliminaryOverall,
+          analysis: audioAnalysis,
+          frames: [],
+          frameAnalyses: [],
+          confidenceValue: initialConfidence,
+          status: 'processing',
+        };
+
+        const analysisId = await saveAnalysisResult(baseResult, 'processing');
+        const initialPayload = { ...baseResult, id: analysisId };
+        console.log('Initial video analysis saved, returning partial result');
+
+        res.status(200).json(initialPayload);
+
+        (async () => {
+          try {
+            console.log('Starting background frame extraction and analysis...');
+            const frames = await extractFramesFromVideo(filePath);
+            console.log(`Extracted ${frames.length} frames from video`);
+
+            const frameAnalysisTasks = frames.map(async (framePath, index) => {
+              console.log(`Starting analysis for frame ${index + 1}/${frames.length}: ${framePath}`);
+              const fullFramePath = path.join(process.cwd(), 'public', framePath);
+              
+              try {
+                const base64Frame = imageToBase64(fullFramePath);
+                const frameAnalysis = await analyzeWithGPT(base64Frame, 'video-frame');
+                return {
+                  framePath,
+                  analysis: frameAnalysis,
+                };
+              } catch (frameError: unknown) {
+                const err = frameError as Error;
+                console.error(`Error analyzing frame ${index + 1}: ${err.message}`);
+                return {
+                  framePath,
+                  analysis: `Error analyzing this frame: ${err.message}`,
+                };
+              }
+            });
+
+            const frameAnalyses = await Promise.all(frameAnalysisTasks);
+            console.log(`All ${frames.length} frames analyzed`);
+
+            let overallAnalysis = '';
+            try {
+              overallAnalysis = await generateOverallAnalysis(audioAnalysis, frameAnalyses);
+            } catch (overallError) {
+              const err = overallError as Error;
+              console.error('Error generating final overall analysis:', err);
+              overallAnalysis =
+                "Error generating overall analysis. Please see individual frame analyses and audio analysis.";
+            }
+
+            const { score: finalConfidence } = deriveConfidenceScore(overallAnalysis || audioAnalysis);
+
+            await updateAnalysisResult(analysisId, {
+              videoPath: relativeVideoPath,
+              audioTranscript,
+              audioAnalysis,
+              frames,
+              frameAnalyses,
+              overallAnalysis,
+              analysis: audioAnalysis,
+              confidenceValue: finalConfidence,
+              status: 'completed',
+            });
+            console.log(`Background processing completed for analysis ${analysisId}`);
+          } catch (backgroundError) {
+            const err = backgroundError as Error;
+            console.error('Background processing failed:', err);
+            await updateAnalysisResult(analysisId, {
+              overallAnalysis: `Error generating overall analysis. Please see individual frame analyses and audio analysis. Details: ${err.message}`,
+              status: 'failed',
+            });
+          }
+        })();
+
+        return;
       } catch (videoError: unknown) {
         const err = videoError as Error;
         console.error(`Error processing video: ${err.message}`);
@@ -286,9 +276,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ message: `Failed to process video file: ${err.message}` });
       }
     }
-    await saveAnalysisResult(analysisResults);
+    const recordId = await saveAnalysisResult(analysisResults);
+    const payload = { ...analysisResults, id: recordId, status: analysisResults.status ?? 'completed' };
     console.log('Analysis completed successfully');
-    return res.status(200).json(analysisResults);
+    return res.status(200).json(payload);
   } catch (error: unknown) {
     const err = error as Error;
     console.error('Error processing upload:', err);

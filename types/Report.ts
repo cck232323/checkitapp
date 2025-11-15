@@ -1,5 +1,6 @@
 
 export interface Report {
+  id?: string;
   type: string;
   content?: string;
   analysis?: string;
@@ -13,6 +14,19 @@ export interface Report {
     analysis: string;
   }[];
   overallAnalysis?: string;
+  confidenceValue?: number;
+  confidenceInterval?: {
+    lower?: number;
+    upper?: number;
+  };
+  metadata?: {
+    processingTime?: number;
+    fileSize?: number;
+    framesAnalyzed?: number;
+    sourceName?: string;
+    [key: string]: unknown;
+  };
+  status?: string;
 }
 export interface AnalysisReport {
   id: string;
@@ -34,4 +48,9 @@ export interface AnalysisReport {
     fileSize?: number;
     framesAnalyzed?: number;
   };
+  confidenceInterval?: {
+    lower?: number;
+    upper?: number;
+  };
+  status?: string;
 }

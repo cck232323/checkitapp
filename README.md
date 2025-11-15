@@ -65,6 +65,57 @@ LiedIn is an advanced web application designed to analyze text, images, videos, 
 4. Click "Analyze" and wait for the processing to complete
 5. View the detailed analysis report with deception indicators
 
+## Production Deployment (AWS EC2)
+
+The repository ships with a single Docker image that runs both the Next.js frontend and the Python analysis backend. The image is production-ready and can be deployed on an Amazon Linux 2023 or Ubuntu EC2 instance.
+
+### 1. Prepare the EC2 instance
+
+- Launch an EC2 instance with at least 2 vCPUs and 4 GB RAM (t3.medium or better is recommended for video processing).
+- Attach a security group that allows inbound HTTP (80), HTTPS (443 if you terminate TLS on the instance), and any custom ports you plan to expose (defaults are 3000 for the UI and 5000 for the backend API).
+- SSH into the instance and install Docker and the Compose plugin:
+
+  ```bash
+  sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+  sudo systemctl enable docker --now
+  sudo usermod -aG docker $USER
+  newgrp docker
+  ```
+
+  On Amazon Linux use `sudo yum install docker` instead of `apt-get`.
+
+### 2. Configure environment variables
+
+Create an `.env.production` file based on the provided template `.env.production`. At a minimum set:
+
+```env
+OPENAI_API_KEY=your_openai_key
+DATABASE_URL=file:/app/prisma/dev.db
+```
+
+Optional overrides:
+
+- `APP_HTTP_PORT` – host port that serves the Next.js UI (default 3000). Set to 80 to serve on the standard HTTP port.
+- `APP_BACKEND_PORT` – host port that forwards to the Python API (default 5000). You can omit exposing this if the frontend is the only consumer.
+
+### 3. Build and run with Docker Compose
+
+```bash
+git clone https://github.com/yourusername/liedin.git
+cd liedin
+cp .env.production .env
+docker compose -f deploy/ec2/docker-compose.yml up -d --build
+```
+
+The compose file tags the image as `liedin-app:latest`. Push the same image to Amazon ECR if you prefer building in CI/CD (use `push-to-ecr.sh` as a starting point) and set `LIEDIN_IMAGE` to the fully qualified ECR image URL before running Compose.
+
+### 4. Post-deployment
+
+- Verify health: `curl http://localhost:3000/api/healthz` should return `{ "status": "ok" }`.
+- Tail logs: `docker compose -f deploy/ec2/docker-compose.yml logs -f`.
+- Persist uploads: a named Docker volume (`liedin_uploads`) stores generated frames and uploads.
+- (Optional) Put Nginx or an Application Load Balancer in front of the container for TLS termination and custom domains.
+
 ## Project Structure
 
 ```

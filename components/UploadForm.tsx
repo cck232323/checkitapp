@@ -169,9 +169,13 @@ const UploadForm: React.FC<UploadFormProps> = ({
       const result = response.data;
       console.log('Analysis result:', result);
       
+      if (!result?.id) {
+        throw new Error('Analysis ID missing from response');
+      }
+      
       // 保存结果并跳转
       sessionStorage.setItem('analysisResult', JSON.stringify(result));
-      window.location.href = `/result?id=${Date.now()}`;
+      window.location.href = `/result?id=${result.id}`;
     } catch (err: any) {
       console.error('Error during analysis:', err);
       
@@ -201,36 +205,36 @@ const UploadForm: React.FC<UploadFormProps> = ({
 
   // 修改渲染部分，使用原生HTML元素而不是隐藏的input
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-lg sm:max-w-xl mx-auto">
       <CardHeader>
         <CardTitle>Upload for Analysis</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-      <div className="flex rounded-lg overflow-hidden mb-4">
+      <CardContent className="space-y-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:rounded-lg sm:overflow-hidden mb-4">
         <Button
           variant={uploadType === 'text' ? 'default' : 'ghost'}
           onClick={() => handleTypeChange('text')}
-          className="flex-1 py-3 px-4 text-center font-medium transition-colors"
+          className="w-full sm:flex-1 py-3 px-4 text-center font-medium transition-colors"
         >
           Text
         </Button>
         <Button
           variant={uploadType === 'image' ? 'default' : 'ghost'}
           onClick={() => handleTypeChange('image')}
-          className="flex-1 py-3 px-4 text-center font-medium transition-colors"
+          className="w-full sm:flex-1 py-3 px-4 text-center font-medium transition-colors"
         >
           Image
         </Button>
         <Button
           variant={uploadType === 'video' ? 'default' : 'ghost'}
           onClick={() => handleTypeChange('video')}
-          className="flex-1 py-3 px-4 text-center font-medium transition-colors"
+          className="w-full sm:flex-1 py-3 px-4 text-center font-medium transition-colors"
         >
           Video
         </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {uploadType === 'text' ? (
           <div className="relative">
             <Textarea
@@ -238,7 +242,7 @@ const UploadForm: React.FC<UploadFormProps> = ({
               onChange={(e) => setTextContent(e.target.value)}
               placeholder="Enter text for analysis..."
               //className="w-full h-40 p-4 rounded-lg bg-gray-900/80 border border-gray-700/50 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-              className="w-full h-40 p-4 rounded-lg bg-blue-200 text-black placeholder-gray-500 border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              className="w-full min-h-[10rem] sm:min-h-[12rem] p-4 rounded-lg bg-blue-200 text-black placeholder-gray-500 border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
               disabled={isLoading}
             />
             {textContent && (
@@ -251,7 +255,7 @@ const UploadForm: React.FC<UploadFormProps> = ({
           <div className="space-y-2">
             <label 
               htmlFor="file-upload" 
-              className="block w-full p-4 text-center border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
+              className="block w-full p-4 text-center text-sm sm:text-base border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
             >
               {file ? file.name : `Click to upload ${uploadType}`}
             </label>
@@ -281,7 +285,7 @@ const UploadForm: React.FC<UploadFormProps> = ({
                    type="submit"
                    variant="default"
           disabled={isLoading}
-          className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-lg hover:shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+          className="w-full py-3 sm:py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-lg hover:shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <span className="flex items-center justify-center">

@@ -32,7 +32,7 @@ export default function Home() {
 
   return (
     <div
-      className={`${geistSans.className} ${geistMono.className} min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-8 pb-20 sm:p-20 transition-opacity duration-700 ease-in-out ${fadeIn ? 'opacity-100' : 'opacity-0'}`}
+      className={`${geistSans.className} ${geistMono.className} min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 px-4 py-10 sm:px-12 sm:py-16 lg:px-20 transition-opacity duration-700 ease-in-out ${fadeIn ? 'opacity-100' : 'opacity-0'}`}
     >
       <Head>
         <title>LiedIn - Deception Analysis Tool</title>
@@ -50,7 +50,7 @@ export default function Home() {
         </div>
 
         {isAnalyzing ? (
-          <div className="bg-gray-800/50 backdrop-blur-sm p-8 rounded-xl shadow-2xl text-center max-w-md w-full border border-gray-700/50 animate-fadeIn">
+          <div className="bg-gray-800/50 backdrop-blur-sm p-8 rounded-xl shadow-2xl text-center w-full max-w-lg border border-gray-700/50 animate-fadeIn">
             <div className="flex flex-col items-center justify-center space-y-4">
               <div className="w-12 h-12 border-t-2 border-b-2 border-blue-500 rounded-full animate-spin"></div>
               <p className="text-xl font-medium text-gray-200 mb-2">Analyzing your upload...</p>
@@ -58,7 +58,7 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <div className="bg-gray-800/50 backdrop-blur-sm p-8 rounded-xl shadow-2xl max-w-md w-full border border-gray-700/50 animate-fadeIn">
+          <div className="bg-gray-800/50 backdrop-blur-sm p-8 rounded-xl shadow-2xl w-full max-w-lg border border-gray-700/50 animate-fadeIn">
             <UploadForm 
               onAnalysisStart={handleAnalysisStart}
               onAnalysisComplete={handleAnalysisComplete}

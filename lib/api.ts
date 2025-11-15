@@ -1,27 +1,41 @@
 
 import axios from 'axios';
+import { deriveConfidenceScore } from './confidence';
 
 // 定义API响应类型
-export interface VideoAnalysisResponse {
+interface BaseAnalysisResponse {
+  id?: string;
+  status?: string;
+  confidenceValue?: number;
+  confidenceInterval?: {
+    lower?: number;
+    upper?: number;
+  };
+}
+
+export interface VideoAnalysisResponse extends BaseAnalysisResponse {
   type: 'video';
   frames: string[];
   frameAnalyses: { analysis: string }[];
   videoPath: string;
+  analysis?: string;
   audioTranscript?: string;
   audioAnalysis?: string;
   overallAnalysis?: string;
 }
 
-export interface ImageAnalysisResponse {
+export interface ImageAnalysisResponse extends BaseAnalysisResponse {
   type: 'image';
   imagePath: string;
   analysis: string;
+  overallAnalysis?: string;
 }
 
-export interface TextAnalysisResponse {
+export interface TextAnalysisResponse extends BaseAnalysisResponse {
   type: 'text';
   content: string;
   analysis: string;
+  overallAnalysis?: string;
 }
 
 export type AnalysisResponse = VideoAnalysisResponse | ImageAnalysisResponse | TextAnalysisResponse;
@@ -185,32 +199,7 @@ export class LiedInAPI {
    * @param result 分析结果
    */
   extractConfidenceScore(result: any): number {
-    if (!result || !result.overallAnalysis) {
-      return 50; // 默认值
-    }
-    
-    // 尝试从overallAnalysis文本中提取置信区间
-    // 使用正则表达式匹配 "Confidence Interval: XX–YY%" 格式
-    const confidenceMatch = result.overallAnalysis.match(/\*\*Confidence Interval\*\*:\s*(\d+)[\–\-](\d+)%?/);
-    
-    if (confidenceMatch && confidenceMatch.length >= 3) {
-      // 提取区间的两个数值并计算平均值
-      const lowerBound = parseInt(confidenceMatch[1], 10);
-      const upperBound = parseInt(confidenceMatch[2], 10);
-      return Math.round((lowerBound + upperBound) / 2);
-    }
-    
-    // 如果没有找到匹配，尝试其他可能的格式
-    const altMatch = result.overallAnalysis.match(/confidence\s*(?:interval|level|rating|score)?:?\s*(\d+)\s*[-\u2013]\s*(\d+)\s*[%％]?/i);
-    
-    if (altMatch && altMatch.length >= 3) {
-      const lowerBound = parseInt(altMatch[1], 10);
-      const upperBound = parseInt(altMatch[2], 10);
-      return Math.round((lowerBound + upperBound) / 2);
-    }
-    
-    // 如果仍然没有找到，返回默认值
-    return 50;
+    return deriveConfidenceScore(result).score;
   }
 }
 

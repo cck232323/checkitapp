@@ -1,7 +1,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @next/next/no-img-element */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -26,6 +26,7 @@ interface FrameAnalysis {
 }
 
 interface AnalysisResult {
+  id?: string;
   type: 'text' | 'image' | 'video';
   content?: string;
   analysis?: string;
@@ -34,9 +35,23 @@ interface AnalysisResult {
   audioTranscript?: string;
   audioAnalysis?: string;
   frames?: string[];
-  frameAnalyses?: FrameAnalysis[] | Array<{analysis: string}>;
+  frameAnalyses?: FrameAnalysis[] | Array<{ analysis: string }>;
   overallAnalysis?: string;
   confidenceValue?: number;
+  confidenceInterval?: {
+    lower?: number;
+    upper?: number;
+  };
+  createdAt?: string;
+  fileName?: string;
+  metadata?: {
+    processingTime?: number;
+    fileSize?: number;
+    framesAnalyzed?: number;
+    sourceName?: string;
+  };
+  fileSize?: number;
+  status?: string;
 }
 
 // 在文件顶部（ResultPage 组件上方）新增一个通用可折叠组件
@@ -96,9 +111,9 @@ const TruthIndicator: React.FC<{
         ? 'bg-green-900/30 border-green-500' 
         : 'bg-red-900/30 border-red-500'
     }`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold mb-2">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between text-center sm:text-left">
+        <div className="space-y-2">
+          <h2 className="text-3xl font-bold">
             {isTruthful ? 'TRUE' : 'FALSE'}
           </h2>
           {/* <p className="text-gray-300">
@@ -126,7 +141,6 @@ const ResultPage: React.FC = () => {
   const [confidenceValue, setConfidenceValue] = useState<number>(0);
   const [isPremiumUnlocked, setIsPremiumUnlocked] = useState<boolean>(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
-  const [report, setReport] = useState<AnalysisReport | null>(null);
   
   useEffect(() => {
     // Add fade-in effect on page load
@@ -187,44 +201,13 @@ const ResultPage: React.FC = () => {
         setResult(parsedResult);
         setLoading(false);
         
-        // 添加置信区间值的解析
         if (parsedResult) {
-          // 从 overallAnalysis 文本中提取置信区间
-          let confidence = 50; // 默认值
-          
-          if (parsedResult.overallAnalysis) {
-            // 使用正则表达式匹配 "Confidence Interval: XX–YY%" 格式
-            // const confidenceMatch = parsedResult.overallAnalysis.match(/\*\*Confidence Interval\*\*:\s*(\d+)[\–\-](\d+)%?/);
-            const confidenceMatch = parsedResult.overallAnalysis.match(
-  /(\d{1,3})\s*[-‐-‒–—―−]\s*(\d{1,3})/
-);
-            if (confidenceMatch && confidenceMatch.length >= 3) {
-              // 提取区间的两个数值并计算平均值
-              const lowerBound = parseInt(confidenceMatch[1], 10);
-              const upperBound = parseInt(confidenceMatch[2], 10);
-              confidence = Math.round((lowerBound + upperBound) / 2);
-              console.log(`Extracted confidence interval: ${lowerBound}-${upperBound}, average: ${confidence}`);
-            } else {
-              // 如果没有找到匹配，尝试其他可能的格式
-              const altMatch = parsedResult.overallAnalysis.match(/confidence\s*(?:interval|level|rating|score)?:?\s*(\d+)[\–\-](\d+)%?/i);
-              
-              if (altMatch && altMatch.length >= 3) {
-                const lowerBound = parseInt(altMatch[1], 10);
-                const upperBound = parseInt(altMatch[2], 10);
-                confidence = Math.round((lowerBound + upperBound) / 2);
-                console.log(`Extracted alternative confidence format: ${lowerBound}-${upperBound}, average: ${confidence}`);
-              } else {
-                // 如果仍然没有找到，使用随机值作为示例
-                confidence = Math.floor(Math.random() * 100);
-                console.log(`No confidence interval found, using random value: ${confidence}`);
-              }
-            }
-          }
-          
+          const confidence =
+            typeof parsedResult.confidenceValue === 'number'
+              ? parsedResult.confidenceValue
+              : api.extractConfidenceScore(parsedResult);
           setConfidenceValue(confidence);
         }
-        
-        return;
       }
     } catch (err) {
       console.error("Failed to read from sessionStorage:", err);
@@ -240,8 +223,10 @@ const ResultPage: React.FC = () => {
         console.log("Results retrieved from API:", response);
         setResult(response);
         
-        // 使用API提取置信度分数
-        const confidence = api.extractConfidenceScore(response);
+        const confidence =
+          typeof response.confidenceValue === 'number'
+            ? response.confidenceValue
+            : api.extractConfidenceScore(response);
         setConfidenceValue(confidence);
       } catch (err: any) {
         console.error('Error fetching result:', err);
@@ -253,6 +238,31 @@ const ResultPage: React.FC = () => {
 
     fetchResult();
   }, [id]);
+
+  useEffect(() => {
+    if (!result?.id) return;
+    if (result.status === 'completed' || result.status === 'failed') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const latest = await api.getResult(result.id as string);
+        setResult(latest);
+        const confidence =
+          typeof latest.confidenceValue === 'number'
+            ? latest.confidenceValue
+            : api.extractConfidenceScore(latest);
+        setConfidenceValue(confidence);
+
+        if (latest.status === 'completed' || latest.status === 'failed') {
+          clearInterval(interval);
+        }
+      } catch (pollError) {
+        console.error('Error polling analysis result:', pollError);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [result?.id, result?.status]);
 
   // Process frame analysis data to ensure correct format
   const processedFrameAnalyses = result?.frames && result?.frameAnalyses ? 
@@ -285,6 +295,92 @@ const ResultPage: React.FC = () => {
     console.log("Processed path:", processedPath);
     return processedPath;
   };
+
+  // 构建报告数据结构
+  const buildReportData = useCallback((analysisResult: AnalysisResult): AnalysisReport => {
+    const rawMetadata = analysisResult.metadata || {};
+
+    const derivedCreatedAt = (() => {
+      const createdAt = analysisResult.createdAt;
+      if (createdAt) {
+        const date = new Date(createdAt);
+        if (!Number.isNaN(date.getTime())) {
+          return date.toISOString();
+        }
+      }
+      return new Date().toISOString();
+    })();
+
+    const framesAnalyzed = rawMetadata.framesAnalyzed ?? (Array.isArray(analysisResult.frames) ? analysisResult.frames.length : undefined);
+
+    const fileSizeFromResult = typeof rawMetadata.fileSize === 'number'
+      ? rawMetadata.fileSize
+      : typeof analysisResult.fileSize === 'number'
+        ? analysisResult.fileSize
+        : undefined;
+
+    const resolvedFileName = (() => {
+      if (analysisResult.fileName) return analysisResult.fileName;
+      if (typeof rawMetadata.sourceName === 'string') return rawMetadata.sourceName;
+      switch (analysisResult.type) {
+        case 'image':
+          return 'Image Upload';
+        case 'video':
+          return 'Video Upload';
+        case 'text':
+          return 'Text Submission';
+        default:
+          return 'Analysis';
+      }
+    })();
+
+    const evidence: string[] = [];
+    if (analysisResult.overallAnalysis) {
+      evidence.push('Overall analysis generated');
+    }
+    if (analysisResult.audioAnalysis) {
+      evidence.push('Includes audio transcript insights');
+    }
+    if (Array.isArray(analysisResult.frameAnalyses) && analysisResult.frameAnalyses.length > 0) {
+      evidence.push(`${analysisResult.frameAnalyses.length} frame analyses available`);
+    }
+    if (evidence.length === 0) {
+      evidence.push('Analysis completed without detailed indicators');
+    }
+
+    return {
+      id: (analysisResult.id ?? (id as string) ?? 'N/A').toString(),
+      fileName: resolvedFileName,
+      fileType: analysisResult.type ?? 'unknown',
+      createdAt: derivedCreatedAt,
+      overallRisk: confidenceValue >= 65 ? 'low' : 'high',
+      confidenceScore: confidenceValue,
+      summary: analysisResult.overallAnalysis || analysisResult.analysis || 'No summary available',
+      indicators: [
+        {
+          description: analysisResult.overallAnalysis
+            ? 'Overall assessment ready for review'
+            : 'Potential deception indicators detected',
+          severity: confidenceValue >= 65 ? 'low' : 'high',
+          type: analysisResult.type === 'video' ? 'multimedia' : 'behavioral',
+          confidence: confidenceValue,
+          evidence,
+        },
+      ],
+      metadata: {
+        processingTime:
+          typeof rawMetadata.processingTime === 'number'
+            ? rawMetadata.processingTime
+            : 0,
+        fileSize: fileSizeFromResult,
+        framesAnalyzed,
+      },
+      status: analysisResult.status || undefined,
+      confidenceInterval: analysisResult.confidenceInterval,
+    };
+  }, [confidenceValue, id]);
+
+  const report = useMemo(() => (result ? buildReportData(result) : null), [result, buildReportData]);
 
   if (loading) {
     return (
@@ -344,76 +440,44 @@ const ResultPage: React.FC = () => {
     }
   };
 
-  // 构建报告数据结构
-  const buildReportData = (): AnalysisReport => {
-    return {
-      id: id as string,
-      fileName: "Sample Analysis",
-      fileType: result.type,
-      createdAt: new Date().toISOString(),
-      overallRisk: confidenceValue >= 65 ? 'low' : 'high',
-      confidenceScore: confidenceValue,
-      summary: result.overallAnalysis || result.analysis || 'No summary available',
-      indicators: [
-        {
-          description: "Potential deception indicators detected",
-          severity: confidenceValue >= 65 ? 'low' : 'high',
-          type: "behavioral",
-          confidence: confidenceValue,
-          evidence: ["Analysis suggests potential deception patterns"]
-        }
-      ],
-      metadata: {
-        processingTime: 1200,
-        fileSize: 1024000,
-        framesAnalyzed: result.frames?.length || 0
-      }
-    };
-  };
-
-  // 如果有报告数据，使用 ResultReport 组件
-  if (report) {
-    return (
-      <div className={`${geistSans.className} ${geistMono.className} min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-6 sm:p-8 transition-opacity duration-700 ease-in-out ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
-        <Head>
-          <title>Analysis Results - LiedIn</title>
-          <meta name="description" content="Deception analysis results" />
-        </Head>
-        
-        <div className="max-w-6xl mx-auto">
-          <ResultReport 
-            report={report} 
-            onNewAnalysis={() => {
-              // 处理新分析的逻辑
-              router.push('/');
-            }} 
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`${geistSans.className} ${geistMono.className} min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-6 sm:p-8 transition-opacity duration-700 ease-in-out ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
+    <div className={`${geistSans.className} ${geistMono.className} min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 px-4 py-8 sm:px-8 sm:py-10 transition-opacity duration-700 ease-in-out ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
       <Head>
         <title>Analysis Results - LiedIn</title>
         <meta name="description" content="Deception analysis results" />
       </Head>
 
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-8 animate-fadeIn">
-          <h1 className="text-4xl font-bold text-white mb-2">Analysis Results</h1>
-          <p className="text-gray-300">
-            Content Type: {result.type === 'text' ? 'Text' : result.type === 'image' ? 'Image' : 'Video'}
-          </p>
-        </header>
+      <div className="max-w-6xl mx-auto space-y-8">
+        {report && (
+          <ResultReport
+            report={report}
+            onNewAnalysis={() => {
+              router.push('/');
+            }}
+          />
+        )}
 
         <main className="space-y-8">
+          <div className="animate-fadeIn text-gray-300">
+            Content Type: {result.type === 'text' ? 'Text' : result.type === 'image' ? 'Image' : 'Video'}
+          </div>
+
           {/* 真假指示器 */}
           <TruthIndicator confidenceValue={confidenceValue} />
+
+          {result.status === 'processing' && (
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
+              Frame analyses are still running in the background. This page will update automatically when they are ready.
+            </div>
+          )}
+          {result.status === 'failed' && (
+            <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              We were unable to finish analyzing all frames. The current report reflects the latest available data.
+            </div>
+          )}
           
           {/* 总览 */}
-          <CollapsibleSection title="Analysis Summary" defaultOpen>
+          {/* <CollapsibleSection title="Analysis Summary" defaultOpen>
             <div className="whitespace-pre-line text-gray-200 prose prose-invert max-w-none">
               {result.overallAnalysis ||
                 result.analysis ||
@@ -425,10 +489,10 @@ const ResultPage: React.FC = () => {
                     }`
                   : "No overall analysis available")}
             </div>
-          </CollapsibleSection>
+          </CollapsibleSection> */}
 
           {/* 音频转写与分析（仅视频且有转写时显示） */}
-          {result.type === "video" && result.audioTranscript && (
+          {/* {result.type === "video" && result.audioTranscript && (
             <CollapsibleSection title="Audio Transcription & Analysis" defaultOpen={false}>
               <h3 className="text-xl font-medium text-white mb-3 border-b border-gray-700 pb-2">
                 Audio Transcription
@@ -450,6 +514,12 @@ const ResultPage: React.FC = () => {
                 </>
               )}
             </CollapsibleSection>
+          )} */}
+
+          {result.type === "video" && (!result.frames || result.frames.length === 0) && result.status === 'processing' && (
+            <div className="rounded-xl border border-dashed border-gray-600/70 bg-gray-800/40 px-6 py-4 text-sm text-gray-300">
+              Frame-by-frame insights are being generated. Stay on this page and they will appear automatically once completed.
+            </div>
           )}
 
           {/* 视频帧分析（仅视频且有帧时显示） - 付费内容 */}

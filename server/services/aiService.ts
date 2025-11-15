@@ -108,6 +108,7 @@ ${content}
           { role: "user", content: prompt }
         ],
         max_tokens: 1000,
+        temperature: 0.1,
       });
       
       console.log('OpenAI API response received successfully');
@@ -186,6 +187,7 @@ Output Format (Markdown)
           }
         ],
         max_tokens: 1000,
+        temperature: 0.1,
       });
       
       console.log('OpenAI API response received successfully for image');
@@ -249,6 +251,7 @@ export async function generateOverallAnalysis(audioAnalysis: string, frameAnalys
 6) Risk warning: List factors that may lead to misjudgment (sampling bias, image quality, editing, lack of context)
 
 (Please exercise restraint and professionalism, avoid interpreting correlation as causation; do not make legal or medical conclusions.)`;
+
   // Add audio analysis if available
   if (audioAnalysis) {
     overallPrompt += "AUDIO ANALYSIS:\n" + audioAnalysis + "\n\n";
@@ -281,6 +284,7 @@ export async function generateOverallAnalysis(audioAnalysis: string, frameAnalys
         { role: "user", content: overallPrompt }
       ],
       max_tokens: 1500,
+      temperature: 0.1,
     });
     
     const analysisText = response.choices[0].message?.content || "No overall analysis available.";

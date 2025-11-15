@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAnalysisResult } from 'server/services/dbService';
+import { deriveConfidenceScore } from '@/lib/confidence';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -15,7 +16,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const result = await getAnalysisResult(id);
     console.log('Retrieved analysis result:', JSON.stringify(result));
-    return res.status(200).json(result);
+    const { score: confidenceScore, lower, upper } = deriveConfidenceScore(result);
+    return res.status(200).json({
+      ...result,
+      confidenceValue: confidenceScore,
+      confidenceInterval: lower !== undefined && upper !== undefined ? { lower, upper } : undefined,
+    });
   } catch (error: any) {
     console.error('Error retrieving analysis result:', error);
     return res.status(500).json({ message: error.message || 'Failed to retrieve analysis result' });

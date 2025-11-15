@@ -54,12 +54,20 @@ COPY --from=frontend-builder /app/package*.json ./
 COPY --from=frontend-builder /app/node_modules ./node_modules
 
 COPY --from=frontend-builder /app/prisma ./prisma
+
+# Ensure runtime envs for both Node and Python layers
 ENV PYTHONPATH="/app/analyzer-backend"
 ENV PYTHONUNBUFFERED=1
+ENV NODE_ENV=production
+ENV BACKEND_API_URL="http://127.0.0.1:5000"
+
+# Prepare shared upload directory used by both services
+RUN mkdir -p /app/public/uploads
+
 EXPOSE 3000 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3000/healthz || exit 1
+  CMD curl -f http://localhost:3000/api/healthz || exit 1
 
 #CMD ["sh", "-c", "python3 analyzer-backend/server.py & node .next/standalone/server.js"]
 #CMD ["sh", "-c", "python3 analyzer-backend/server.py & node server.js"]
